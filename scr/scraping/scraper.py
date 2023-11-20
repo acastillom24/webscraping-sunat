@@ -9,61 +9,87 @@ headers = {
 
 proxy = {'https': 'https://10.112.244.80:8080', 'http': 'http://10.112.244.80:8080'}
 
+
+def establish_connection():
+    payload = {
+        "accion": "consPorRazonSoc",
+        "razSoc": "Alin"
+    }
+    req = requests.session()
+    try:
+        response = req.post(BASE_URL, data=payload, headers=headers)
+        if response.status_code == 200:
+            return req
+        else:
+            print(f"The request failed. Status code: {response.status_code}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error connecting: {e}")
+        return None
+
+
+def extract_value(div_tag):
+    p_tags = div_tag.find_all("p", {"class": "list-group-item-text"})
+    td_elements = div_tag.find_all("td")
+
+    if p_tags:
+        return [p.get_text().strip() for p in p_tags]
+    elif td_elements:
+        return [td.get_text().strip() for td in td_elements]
+
+    return None
+
+
 class InfoSUNAT:
     def __init__(self, num_ruc):
         self.num_ruc = num_ruc
 
-        if self.validar_ruc:
-            self.sunat = self.establish_connection()
+        if self.validate_ruc:
+            self.req = establish_connection()
         else:
-            print("El RUC ingresado no es valido.")
+            print("The entered RUC is not valid.")
 
-    def validar_ruc(self):
-        suma_total, k, t = 0, 5, 7
+    def validate_ruc(self):
+        total_sum, k, t = 0, 5, 7
         for idx, num in enumerate(self.num_ruc):
-            peso = k if idx <= 3 else t
-            suma_total += int(num) * peso
+            weight = k if idx <= 3 else t
+            total_sum += int(num) * weight
             k, t = k - 1 if idx <= 3 else k, t - 1
 
-        resto = suma_total % 11
-        complemento = '0' if resto == 1 else str(11 - resto)[0]
+        rest = total_sum % 11
+        complement = '0' if rest == 1 else str(11 - rest)[0]
 
-        return self.num_ruc[-1] == complemento
+        return self.num_ruc[-1] == complement
 
-    def establish_connection(self):
-        payload = {"accion": "consPorRazonSoc", "razSoc": "Alin"}
-        sunat = requests.session()
+    def get_random(self):
+        payload = {
+            "accion": "consPorRazonSoc",
+            "razSoc": "Alin"
+        }
         try:
-            response = sunat.post(BASE_URL, data=payload, headers=headers)
-            if response.status_code == 200:
-                return sunat
-            else:
-                print(f"La solicitud falló. Código de estado: {response.status_code}")
-                return None
-        except requests.exceptions.RequestException as e:
-            print(f"Error al conectar: {e}")
-            return None
-
-    def getRandom(self):
-        payload = {"accion": "consPorRazonSoc", "razSoc": "Alin"}
-        try:
-            response = self.sunat.post(BASE_URL, data=payload, headers=headers)
+            response = self.req.post(BASE_URL, data=payload, headers=headers)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, "html.parser")
-                numRndInput = soup.find("input", {"name": "numRnd"})
-                return numRndInput.get("value")
+                num_rnd_input = soup.find("input", {"name": "numRnd"})
+                return num_rnd_input.get("value")
             else:
-                print(f"La solicitud falló. Código de estado: {response.status_code}")
+                print(f"The request failed. Status code: {response.status_code}")
                 return None
         except requests.exceptions.RequestException as e:
-            print(f"Error al conectar: {e}")
+            print(f"Error connecting: {e}")
             return None
 
-    def consultar_ruc(self):
+    def check_ruc(self, num_random=None):
         try:
-            key = self.getRandom()
-            if not key:
-                print("No se pudo obtener el número aleatorio")
+            key = num_random
+            num_iter_max = 0
+
+            while num_iter_max < 3 and key is None:
+                key = self.get_random()
+                num_iter_max += 1
+
+            if num_iter_max == 3:
+                print("Failed to obtain the random number.")
                 return None
 
             payload = {
@@ -74,21 +100,33 @@ class InfoSUNAT:
                 "numRnd": key
             }
 
-            response = self.sunat.post(BASE_URL, data=payload, headers=headers)
-
-            if response.status_code == 200:
-                return self.parse_response(response.text)
-            else:
-                print(f"Error en la solicitud a la SUNAT. Código de estado: {response.status_code}")
-                return None
+            retry_count = 0
+            while retry_count < 3:
+                try:
+                    response = self.req.post(BASE_URL, data=payload, headers=headers)
+                    if response.status_code == 200:
+                        return self.parse_response(response.text)
+                    else:
+                        print(f"The request failed. Status code: {response.status_code}")
+                    retry_count += 1
+                except requests.exceptions.RequestException as e:
+                    print(f"Error Connecting: {e}")
+                    retry_count += 1
+                    self.req = establish_connection()
         except requests.exceptions.RequestException as e:
-            print(f"Error al conectar: {e}")
+            print(f"Error Connecting: {e}")
             return None
 
     def parse_response(self, html_text):
         data = {}
         soup = BeautifulSoup(html_text, "html.parser")
         div_tags = soup.find_all("div", {"class": "list-group-item"})
+        num_rnd_input = soup.find("input", {"name": "numRnd"})
+
+        if num_rnd_input is not None:
+            num_random = num_rnd_input.get("value")
+        else:
+            num_random = None
 
         if div_tags:
             for div_tag in div_tags:
@@ -102,9 +140,9 @@ class InfoSUNAT:
                     elif key in ["Fecha de Inscripción", "Sistema Emisión de Comprobante"]:
                         h4_tags = div_tag.find_all("h4", {"class": "list-group-item-heading"})
                         keys = [h4.get_text().strip(":") for h4 in h4_tags]
-                        values = self.extract_value(div_tag)
+                        values = extract_value(div_tag)
                     else:
-                        value = self.extract_value(div_tag)
+                        value = extract_value(div_tag)
 
                     try:
                         if keys:
@@ -116,21 +154,10 @@ class InfoSUNAT:
                         else:
                             data[key] = value[0]
                     except Exception as e:
-                        print(f"Error en el ruc: {self.num_ruc}")
-        return data
+                        print(f"Error Connecting: {self.num_ruc}\n{e}")
+        return {"data": data, "num_random": num_random}
 
-    def extract_value(self, div_tag):
-        p_tags = div_tag.find_all("p", {"class": "list-group-item-text"})
-        td_elements = div_tag.find_all("td")
-
-        if p_tags:
-            return [p.get_text().strip() for p in p_tags]
-        elif td_elements:
-            return [td.get_text().strip() for td in td_elements]
-
-        return None
-
-    def getRepresentantesLegales(self, des_ruc, nro_ruc):
+    def get_legal_representatives(self, des_ruc, nro_ruc):
         try:
             payload = {
                 "accion": "getRepLeg",
@@ -139,7 +166,7 @@ class InfoSUNAT:
                 "desRuc": des_ruc,
                 "nroRuc": nro_ruc
             }
-            response = self.sunat.post(BASE_URL, data=payload, headers=headers, proxies=proxy, verify=False)
+            response = self.req.post(BASE_URL, data=payload, headers=headers)
             if response.status_code == 200:
                 data = []
                 soup = BeautifulSoup(response.text, "html.parser")

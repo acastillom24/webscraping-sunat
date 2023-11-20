@@ -1,39 +1,46 @@
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from scr.scraping.scraper import InfoSUNAT
 from scr.data_processing.data_cleaning import CleanInfoSUNAT
 
-def ejecutar_programa():
-    path_data_rucs = "../data/raw/rucs_part1.csv"
-    data_rucs = pd.read_csv(path_data_rucs, sep="|", header=0)
-    rucs_array = np.array(data_rucs)
 
-    info_rucs = []
-    for idx, ruc in enumerate(rucs_array):
-        num_ruc = ruc[1]
-        objSUNAT = InfoSUNAT(num_ruc)
-        resultado = objSUNAT.consultar_ruc()
-        if resultado:
-            info_rucs.append(resultado)
+def split_csv(input_path, output_prefix, chunk_size=5000):
+    df = pd.read_csv(input_path, sep="|", header=0)
 
-        if idx % 100 == 0:
-            print(f"Index: {idx}")
+    total_records = len(df)
+    num_chunks = total_records // chunk_size + (1 if total_records % chunk_size != 0 else 0)
 
-    objCleanSUNAT = CleanInfoSUNAT(info_rucs)
-    objCleanSUNAT.save_json(pathToSave="../data/raw/data_info_rucs.json")
+    for i in range(num_chunks):
+        start_idx = i * chunk_size
+        end_idx = (i + 1) * chunk_size
+        chunk_df = df.iloc[start_idx:end_idx]
 
-    """
-    objCleanSUNAT = CleanInfoSUNAT(resultado)
-    info_ruc = objCleanSUNAT.get_info_ruc()
-    representantes_legales = objSUNAT.representantes_legales(info_ruc[1], info_ruc[0])
-    if representantes_legales:
-        all_info_represtantes_legales.append(representantes_legales)
-    """
+        output_path = f"{output_prefix}_{i + 1}.csv"
+        chunk_df.to_csv(output_path, index=False, sep="|")  # Ajusta el separador según tus preferencias
 
-    # Tarea: Crear el export.
+        print(f"Archivo {i + 1}/{num_chunks} creado: {output_path}")
+
+
+def get_check_ruc(input_path, output_path):
+    df = pd.read_csv(input_path, sep="|", header=0)
+    arr = np.array(df)
+
+    info = []
+    num_random = None
+    for idx, el in tqdm(enumerate(arr), total=len(arr), desc="Processing RUCs"):
+        num_ruc = el[1]
+        obj = InfoSUNAT(num_ruc)
+        result = obj.check_ruc(num_random)
+        if result:
+            num_random = result["num_random"]
+            info.append(result["data"])
+
+    obj_clean = CleanInfoSUNAT(info)
+    obj_clean.save_json(pathToSave=output_path)
+
 
 if __name__ == "__main__":
-    ejecutar_programa()
-
-
+    # split_csv("../data/raw/rucs.csv", "../data/processed/df")
+    get_check_ruc("../data/processed/df_1.csv", "../data/processed/df_1.json")
