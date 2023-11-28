@@ -1,0 +1,17 @@
+{
+    "app_name": "XVBA",
+    "description": "",
+    "author": "",
+    "email": "",
+    "create_ate": "Sun Nov 19 2023 10:56:03 GMT-0500 (Peru Standard Time)",
+    "excel_file": "index.xlsm",
+    "vba_folder": "vba-files",
+    "ribbon_file": "customUI14",
+    "ribbon_folder": "ribbons",
+    "logs": "on",
+    "xvba_packages": {},
+    "xvba_dev_packages": {},
+    "server": {
+        "encoding": "utf-8"
+    }
+}

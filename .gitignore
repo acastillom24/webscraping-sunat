@@ -1,2 +1,6 @@
 venv
-.idea
+logs
+xvba_modules
+xvba_unit_test
+*.pyc
+*.idea
